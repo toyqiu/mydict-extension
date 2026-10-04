@@ -208,6 +208,8 @@ async function runLookup(word, { keepHistory = false, translate = false } = {}) 
         onNotify: notify,
         isDarkMode: dark,
         audioEnabled: settings.enableAudio,
+        // 与面板保持一致（弹窗是扩展页面，直连从不失败，这一层实际不会走到）
+        sendBackground: (message) => chrome.runtime.sendMessage(message),
       // 翻译模式下「翻译」标签默认激活
       translate: {
         text: word,

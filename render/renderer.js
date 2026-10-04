@@ -492,24 +492,19 @@ export function renderResults(results, container, options) {
       body.appendChild(section)
     })
 
-    // 发音失败提示条：链路上任何一步失败都要说出来，不能只表现为「没声音」
-    const audioNote = document.createElement('div')
-    audioNote.className = 'mydict-audio-note'
-    audioNote.hidden = true
-    body.appendChild(audioNote)
-
     if (audioEnabled) {
       wireDictAudio(
         body,
         (resourcePath) => resourcePath, // 资源已在 absolutizeResourceRefs 里变成绝对地址
-        (message) => {
-          audioNote.textContent = `发音播放失败：${message}`
-          audioNote.hidden = false
+        {
+          // 反馈走面板级 toast，而不是每组词条各造一个提示条：文档级发音委派只有一个
+          // 「当前播放入口」，提示条挂在某一组里时，失败信息可能落进折叠的组、用户看不到
+          // （真机「无声也无提示」正是这个由来）。
+          onStart: () => onNotify?.('ok', '🔊 播放中…'),
+          onFail: (message) => onNotify?.('error', `发音失败：${message}`),
+          onSuccess: () => {},
         },
-        () => {
-          audioNote.hidden = true
-        },
-        // 页面上下文（划词面板）里的发音兜底通道：background 取字节转 data URL
+        // 页面上下文（划词面板）里的发音兜底通道：background 取字节 → Web Audio / data URL
         options.sendBackground,
       )
     }

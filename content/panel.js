@@ -213,6 +213,8 @@ export function createPanel({ lookup, vocab, getSettings, openOptions }) {
         onNotify: notify,
         isDarkMode: dark,
         audioEnabled: settings.enableAudio,
+        // 发音兜底通道（网页上下文里直连媒体可能被页面 CSP/跨站策略拦掉，经 background 取字节）
+        sendBackground: (message) => chrome.runtime.sendMessage(message),
         // 翻译模式下「翻译」标签默认激活；译文请求自带缓存与 background 降级
         translate: {
           text: word,
@@ -407,6 +409,8 @@ export function createPanel({ lookup, vocab, getSettings, openOptions }) {
     const utterance = new SpeechSynthesisUtterance(wordEl.textContent || '')
     utterance.lang = document.documentElement.lang || navigator.language || 'en'
     speechSynthesis.speak(utterance)
+    // 朗读没有错误回调，给一条「已触发」反馈：能区分「点击没送达」与「TTS 静默失败」
+    notify('ok', '🔊 朗读中…')
   })
 
   return {
