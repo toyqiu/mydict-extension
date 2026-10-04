@@ -154,6 +154,24 @@ export function start() {
     { capture: true, passive: true },
   )
 
+  // 用户点了别处（不是我们的 UI）→ 立刻收起浮标。
+  //
+  // 浮标本来只在选区塌陷时才收；但别的扩展（例如 NAVI 搜索扩展）点自己的浮标时会
+  // preventDefault 保住选区，选区不塌陷我们就收不掉浮标，于是它一直挂在屏幕上、
+  // 盖住别人的二级菜单。用户都已经点别处了，就不在「选词 → 点浮标」这条路径上了。
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      // 注意用 hasAttribute：`node[UI_ATTR]` 这种把带连字符的属性当 JS 属性读取不到值
+      const inOurUI = event
+        .composedPath()
+        .some((node) => node instanceof Element && node.hasAttribute(UI_ATTR))
+      if (inOurUI) return
+      icon.hide()
+    },
+    true,
+  )
+
   // 发音兜底（document 捕获阶段）：个别安卓内核对面板内**两层 shadow 嵌套**的词条元素
   // 不派发 pointerup/click，元素级监听收不到、点音标「完全没反应」（单层 shadow 的浮标没事）。
   // 这里按 composedPath 兜底识别并播放；桌面端鼠标路径与之重复时由 600ms 防双播压掉。
