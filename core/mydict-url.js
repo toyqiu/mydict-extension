@@ -34,6 +34,21 @@ export function buildQueryUrl(base, word) {
 }
 
 /**
+ * `<base>/api/dict/random[?dict_ids=1,2]` —— 随机挑一条词条。
+ *
+ * 注意走的是**网页前台接口**（`/api/dict/*`），服务端没有 `/api/v1/` 版随机接口。
+ * 该接口校验网页会话 JWT、**不认 sk- API Token**；服务端开「开放使用」时匿名可用，
+ * 所以扩展侧一律不带 Token（带了反而必然 401）。
+ */
+export function buildRandomUrl(base, dictIds) {
+  const url = new URL(`${normalizeBase(base)}/api/dict/random`)
+  if (Array.isArray(dictIds) && dictIds.length > 0) {
+    url.searchParams.set('dict_ids', dictIds.join(','))
+  }
+  return url.toString()
+}
+
+/**
  * `<base>/api/dict/online/lookup?word=&lang=` —— 服务端聚合的在线词典
  * （Wikipedia / Wiktionary / 百度百科 + 外部搜索链接）。
  *

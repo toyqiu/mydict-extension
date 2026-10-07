@@ -79,6 +79,11 @@ let history = []
 let requestToken = 0
 let toastTimer = 0
 let currentSettings = null
+/**
+ * 随机浏览当前态。「随机」是**「在线」右侧的一个标签**（不是搜索框旁的按钮），
+ * 所以标签常驻、内容按态渲染；换词走面板里的「换一个 →」。
+ */
+let randomState = { active: false, dictionaryName: '', poolLabel: '', word: '' }
 /** 最近一次渲染返回的键盘导航 API（↑/↓ 切词条分组、←/→ 切语言标签） */
 let renderApi = null
 
@@ -126,7 +131,7 @@ const STATE_COPY = {
   [CODE.ERROR]: { title: '查询失败', detail: '' },
 }
 
-function renderState(copy, { onTranslate } = {}) {
+function renderState(copy, { onTranslate, onRetry } = {}) {
   clearContent()
   const state = document.createElement('div')
   state.className = 'state'
@@ -146,7 +151,13 @@ function renderState(copy, { onTranslate } = {}) {
   retry.type = 'button'
   retry.textContent = '重试'
   retry.addEventListener('click', () => {
+    // 随机浏览的错误页有自己的重试（历史栈里没有对应词条）
+    if (onRetry) {
+      onRetry()
+      return
+    }
     const previous = history[history.length - 1]
+    if (!previous) return
     void runLookup(previous.text, { keepHistory: true, translate: previous.translate })
   })
   actions.appendChild(retry)
@@ -171,7 +182,7 @@ function renderState(copy, { onTranslate } = {}) {
   content.appendChild(state)
 }
 
-function renderLoading(word) {
+function renderLoading(word, label) {
   clearContent()
   const state = document.createElement('div')
   state.className = 'state'
@@ -180,36 +191,28 @@ function renderLoading(word) {
   const spinner = document.createElement('span')
   spinner.className = 'spinner'
   const text = document.createElement('span')
-  text.textContent = `正在查「${word}」…`
+  text.textContent = label ?? `正在查「${word}」…`
   row.append(spinner, text)
   state.appendChild(row)
   content.appendChild(state)
 }
 
-/** 历史栈条目：{ text, translate }——回退要还原「走的哪条线路」。 */
-async function runLookup(word, { keepHistory = false, translate = false } = {}) {
-  const token = ++requestToken
-  if (!keepHistory) history.push({ text: word, translate })
-  backBtn.hidden = history.length <= 1
-  searchInput.value = word
-
-  const settings = await getSettings()
-  const dark =
-    settings.theme === 'dark' ||
-    (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  host.setAttribute('data-theme', dark ? 'dark' : 'light')
-
-    const renderWith = (results, translateActive, dictEmptyText) => {
-      renderApi = renderResults(results, content, {
-        baseUrl: settings.baseUrl,
-        lang: navigator.language,
-        vocab,
-        onNavigate: (nextWord) => void runLookup(nextWord),
-        onNotify: notify,
-        isDarkMode: dark,
-        audioEnabled: settings.enableAudio,
-        // 与面板保持一致（弹窗是扩展页面，直连从不失败，这一层实际不会走到）
-        sendBackground: (message) => chrome.runtime.sendMessage(message),
+/**
+ * 构造「把一组查询结果渲染进面板」的函数。查词与随机浏览共用同一套渲染参数——
+ * 抽出来是为了两条路都能挂上翻译/在线/生词本/图片灯箱这些旁路能力。
+ */
+function makeRenderWith(settings, dark, word) {
+  return (results, translateActive, dictEmptyText) => {
+    renderApi = renderResults(results, content, {
+      baseUrl: settings.baseUrl,
+      lang: navigator.language,
+      vocab,
+      onNavigate: (nextWord) => void runLookup(nextWord),
+      onNotify: notify,
+      isDarkMode: dark,
+      audioEnabled: settings.enableAudio,
+      // 与面板保持一致（弹窗是扩展页面，直连从不失败，这一层实际不会走到）
+      sendBackground: (message) => chrome.runtime.sendMessage(message),
       // 翻译模式下「翻译」标签默认激活
       translate: {
         text: word,
@@ -227,6 +230,14 @@ async function runLookup(word, { keepHistory = false, translate = false } = {}) 
           chrome.runtime.sendMessage({ type: MSG.ONLINE_LOOKUP, payload: { word: w, lang: l } }),
         openExternal: (url) => void chrome.tabs.create({ url }),
       },
+      // 随机浏览：「在线」右侧的「随机」标签（对齐网页版），面板右侧是「换一个 →」
+      random: {
+        active: randomState.active,
+        dictionaryName: randomState.dictionaryName,
+        poolLabel: randomState.poolLabel,
+        word: randomState.word,
+        onNext: () => void runRandom(),
+      },
       // popup 是 460px 小窗，扫描图在弹窗内永远放不大——点大图开独立标签页承载灯箱，
       // 那里才是真全屏（面板里点图仍然是就地遮罩）
       openImages: (urls, index, alt) => {
@@ -239,6 +250,24 @@ async function runLookup(word, { keepHistory = false, translate = false } = {}) 
       },
     })
   }
+}
+
+/** 历史栈条目：{ text, translate }——回退要还原「走的哪条线路」。 */
+async function runLookup(word, { keepHistory = false, translate = false } = {}) {
+  const token = ++requestToken
+  // 查词即离开随机视图（「随机」标签仍在，只是不再激活）
+  randomState = { ...randomState, active: false }
+  if (!keepHistory) history.push({ text: word, translate })
+  backBtn.hidden = history.length <= 1
+  searchInput.value = word
+
+  const settings = await getSettings()
+  const dark =
+    settings.theme === 'dark' ||
+    (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  host.setAttribute('data-theme', dark ? 'dark' : 'light')
+
+    const renderWith = makeRenderWith(settings, dark, word)
 
   if (translate) {
     // 翻译不依赖 MyDict：先把译文视图立起来，词典分组等查询回来再补——
@@ -298,6 +327,47 @@ function submit() {
   // 线路自动判定：像句子（全非字母≥6字 / 英文≥3词）→ 翻译；否则查词典。
   // 面板里语言标签右边有「翻译」标签，两条线路随时可切。
   void runLookup(word, { translate: isTranslateCandidate(word) })
+}
+
+/**
+ * 随机浏览：让 background 挑一条随机词条并取回它的词条 HTML，用查词那套渲染层显示，
+ * 但落在**「在线」右侧的「随机」标签**下（面板右侧带「换一个 →」，对齐网页版）。
+ * 不入历史栈（随机没有「上一个词」的语义）——错误页的重试由 onRetry 自己兜。
+ */
+async function runRandom() {
+  const token = ++requestToken
+  renderLoading('', '正在随机挑词条…')
+
+  const settings = await getSettings()
+  const dark =
+    settings.theme === 'dark' ||
+    (settings.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  host.setAttribute('data-theme', dark ? 'dark' : 'light')
+
+  const result = await chrome.runtime.sendMessage({ type: MSG.RANDOM, payload: {} })
+  if (token !== requestToken) return
+
+  if (!result?.ok) {
+    randomState = { ...randomState, active: false }
+    const copy = STATE_COPY[result?.code] ?? STATE_COPY[CODE.ERROR]
+    renderState(
+      { ...copy, detail: copy.detail || result?.message || '' },
+      { onRetry: () => void runRandom() },
+    )
+    return
+  }
+
+  const { results, hitWord, random } = result.data
+  randomState = {
+    active: true,
+    dictionaryName: random?.dictionary_name || '',
+    // 扩展的 v1 查询覆盖全部可用词典，没有「勾选范围」这一层
+    poolLabel: '全部可用词典',
+    word: hitWord,
+  }
+  searchInput.value = hitWord
+  const renderWith = makeRenderWith(settings, dark, hitWord)
+  renderWith(results, false)
 }
 
 searchInput.addEventListener('keydown', (event) => {

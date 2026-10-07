@@ -12,6 +12,11 @@ export const MSG = {
   /** {word, lang?} -> {results, hitWord, candidates} 按候选词依次查，命中即停 */
   QUERY: 'QUERY',
   /**
+   * {dictIds?} -> {results, hitWord, random} 随机浏览：服务端挑一条随机词条
+   * （`/api/dict/random`），再走同一条查词管线取回它的词条 HTML。
+   */
+  RANDOM: 'RANDOM',
+  /**
    * {word, lang} -> {word, lang, sections, links} 在线词典聚合（Wikipedia/Wiktionary/百度百科）。
    * 无 CORS 头，必须 background 发；服务端总开关关着时返回 UNSUPPORTED。
    */

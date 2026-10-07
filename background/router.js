@@ -51,6 +51,24 @@ async function handleQuery(settings, { word, lang } = {}) {
   return fail(CODE.EMPTY, '没有词典收录这个词')
 }
 
+/**
+ * 随机浏览：先向服务端要一条随机词条（`/api/dict/random`），再用**同一条查词管线**
+ * 取回它的词条 HTML（`/api/v1/query?full_style=true`）——这样渲染层完全不用改。
+ * 结果收敛到「这条随机词条所属的那部词典」，避免退化成一次普通的多词典查询。
+ */
+async function handleRandom(settings, { dictIds } = {}) {
+  const pick = await client.random(settings, dictIds)
+  if (!pick?.word) return fail(CODE.EMPTY, '服务端没有返回随机词条')
+  const payload = await client.query(settings, pick.word)
+  const all = payload?.results || []
+  const sameDict = all.filter((item) => item.dictionary_id === pick.dictionary_id)
+  const results = sameDict.length > 0 ? sameDict : all
+  if (results.length === 0) {
+    return fail(CODE.EMPTY, `随机挑到「${pick.word}」，但没查到词条`)
+  }
+  return ok({ results, hitWord: pick.word, random: pick })
+}
+
 async function handleVocabList(settings, { word } = {}) {
   const base = settings?.baseUrl || ''
   const key = vocabKey(base, word)
@@ -112,6 +130,8 @@ export async function route(message) {
     switch (type) {
       case MSG.QUERY:
         return await handleQuery(settings, payload)
+      case MSG.RANDOM:
+        return await handleRandom(settings, payload)
       case MSG.ONLINE_LOOKUP:
         return ok(await client.onlineLookup(settings, payload))
       case MSG.AUDIO_FETCH:

@@ -155,6 +155,57 @@ export const DICT_CHROME_CSS = `
     color: color-mix(in srgb, currentColor 60%, #d64545);
     margin-bottom: 0.4em;
   }
+  /* ---- 随机浏览标签页（render/renderer.js 的 randomBlock）----
+     对齐网页版 RandomDictPanel：头部左「词典名 + 随机浏览 · N」、右「换一个 →」 */
+  .mydict-random { padding: 0.2em 0.2em 0.4em; }
+  .mydict-random-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6em;
+    margin-bottom: 0.3em;
+  }
+  .mydict-random-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1em;
+    min-width: 0;
+  }
+  .mydict-random-dict {
+    font-size: 0.8em;
+    opacity: 0.85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mydict-random-pool { font-size: 0.8em; opacity: 0.6; }
+  .mydict-random-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    flex-shrink: 0;
+  }
+  .mydict-random .next-btn {
+    border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 0.82em;
+    padding: 0.25em 0.6em;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .mydict-random .next-btn:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+  .mydict-random-word {
+    margin: 0 0 0.4em;
+    font-size: 1.15em;
+    font-weight: 600;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+  /* 随机面板的正文不再重复一条折叠标题条：词典名与词已经在上面的头部里 */
+  details.mydict-group-random > summary.mydict-group-head { display: none; }
   /* ---- 在线词典标签页（render/renderer.js 的 onlineBlock） ---- */
   .mydict-online { padding: 0.4em 0.2em; }
   .mydict-online-card {

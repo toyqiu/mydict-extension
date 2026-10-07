@@ -14,6 +14,7 @@ import {
 } from '../core/protocol.js'
 import {
   buildQueryUrl,
+  buildRandomUrl,
   buildVocabItemUrl,
   buildVocabListUrl,
   buildVocabUrl,
@@ -135,6 +136,29 @@ export async function audioFetch(url) {
 export async function query(settings, word) {
   const { base, token } = await ensureReady(settings)
   return requestJson(buildQueryUrl(base, word), { token, timeoutMs: QUERY_TIMEOUT_MS })
+}
+
+/**
+ * 随机挑一条词条，返回 `{dictionary_id, dictionary_name, word, entry_id}`。
+ *
+ * 走 `/api/dict/random`（服务端没有 v1 版随机接口）。该端点校验网页会话 JWT、
+ * **不认 sk- API Token**，所以这里不带 Token——服务端开「开放使用」时匿名可用；
+ * 没开则 401，翻成可行动的 UNSUPPORTED（与在线词典那条路的处理一致）。
+ */
+export async function random(settings, dictIds) {
+  const { base } = await ensureReady(settings)
+  try {
+    return await requestJson(buildRandomUrl(base, dictIds), { timeoutMs: QUERY_TIMEOUT_MS })
+  } catch (error) {
+    if (error instanceof MydictError && error.status === 401) {
+      throw new MydictError(
+        CODE.UNSUPPORTED,
+        '随机浏览需要 MyDict 开启「开放使用」（管理后台 → 系统设置）',
+        401,
+      )
+    }
+    throw error
+  }
 }
 
 /**

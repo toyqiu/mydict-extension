@@ -27,6 +27,8 @@ export const TRANSLATE_TAB = '__translate__'
 export const DICT_TAB = '__dict__'
 /** 在线词典标签页（Wikipedia / Wiktionary / 百度百科，服务端聚合）。 */
 export const ONLINE_TAB = '__online__'
+/** 随机浏览标签页（紧随「在线」之后，对齐网页版的标签顺序与面板形态）。 */
+export const RANDOM_TAB = '__random__'
 
 /**
  * @param {Array} results 服务端返回的 `results`
@@ -140,6 +142,7 @@ export function renderResults(results, container, options) {
     audioEnabled,
     translate,
     online,
+    random,
   } = options
   container.textContent = ''
 
@@ -147,7 +150,8 @@ export function renderResults(results, container, options) {
   const groups = []
   for (const result of results) {
     const name = result.dictionary_name || '未命名词典'
-    const bucket = langBucket(result.lang_from)
+    // 随机浏览：整组固定挂在「随机」伪标签下（面板只在选中该标签时可见）
+    const bucket = random?.active ? RANDOM_TAB : langBucket(result.lang_from)
     const last = groups[groups.length - 1]
     if (last && last.name === name) last.items.push(result)
     else groups.push({ name, lang: bucket, items: [result] })
@@ -160,12 +164,14 @@ export function renderResults(results, container, options) {
   // 默认选中与页面语言命中一致的那一组：日文网页上查汉字，日文词典排在前面才对。
   // 页面语言没有命中就回到「全部」。
   const pageLang = langBucket(lang)
-  // 「译」图标/搜索框判定进来的直接落在翻译标签上；否则回默认词典组
-  let activeLang = translate?.active
-    ? TRANSLATE_TAB
-    : langOrder.includes(pageLang)
-      ? pageLang
-      : ''
+  // 「译」图标/搜索框判定进来的直接落在翻译标签上；随机浏览落在「随机」标签上；否则回默认词典组
+  let activeLang = random?.active
+    ? RANDOM_TAB
+    : translate?.active
+      ? TRANSLATE_TAB
+      : langOrder.includes(pageLang)
+        ? pageLang
+        : ''
 
   // 同一次渲染里，同一个词头的已收藏状态只查一次
   const savedByWord = new Map()
@@ -189,6 +195,7 @@ export function renderResults(results, container, options) {
     if (translateBlock) translateBlock.style.display = selected === TRANSLATE_TAB ? '' : 'none'
     if (dictEmptyBlock) dictEmptyBlock.style.display = selected === DICT_TAB ? '' : 'none'
     if (onlineBlock) onlineBlock.style.display = selected === ONLINE_TAB ? '' : 'none'
+    if (randomBlock) randomBlock.style.display = selected === RANDOM_TAB ? '' : 'none'
   }
 
   // 语言标签页：多语言、或带翻译/词典空标签时才值得占一行。
@@ -215,8 +222,10 @@ export function renderResults(results, container, options) {
     // 词典查过且为空：给一个「词典」标签，点过去看「没有收录」的说明，词典线路不失联
     const dictEmpty = Boolean(translate?.dictEmptyText) && langOrder.length === 0
     if (dictEmpty) tabs.appendChild(makeTab(DICT_TAB, '词典'))
-    // 「在线」= 服务端聚合的 Wikipedia / Wiktionary / 百度百科；「翻译」保持最右
+    // 「在线」= 服务端聚合的 Wikipedia / Wiktionary / 百度百科；「随机」紧随其后（对齐网页版）；
+    // 「翻译」保持最右
     if (online) tabs.appendChild(makeTab(ONLINE_TAB, '在线'))
+    if (random) tabs.appendChild(makeTab(RANDOM_TAB, '随机'))
     if (translate) tabs.appendChild(makeTab(TRANSLATE_TAB, '翻译'))
     container.appendChild(tabs)
   }
@@ -369,11 +378,54 @@ export function renderResults(results, container, options) {
     onlineBlock.load = runOnlineLookup
   }
 
+  // ---------------------------------------------------------- 随机浏览面板
+  // 对齐网页版 RandomDictPanel：头部左边是「词典名 + 随机浏览 · N」，右边是「换一个 →」，
+  // 下面是词条大标题与词条正文（正文由下面的分组骨架渲染）。
+  const randomBlock = random ? document.createElement('div') : null
+  if (randomBlock) {
+    randomBlock.className = 'mydict-random'
+    randomBlock.style.display = activeLang === RANDOM_TAB ? '' : 'none'
+    // 本次渲染本来就是随机视图时，面板已「加载过」——再点「随机」标签不该重新挑词
+    randomBlock.loaded = Boolean(random.active)
+    const head = document.createElement('header')
+    head.className = 'mydict-random-head'
+    const meta = document.createElement('div')
+    meta.className = 'mydict-random-meta'
+    const dictName = document.createElement('span')
+    dictName.className = 'mydict-random-dict'
+    dictName.textContent = random.dictionaryName || ''
+    const pool = document.createElement('span')
+    pool.className = 'mydict-random-pool'
+    pool.textContent = `随机浏览 · ${random.poolLabel || '全部可用词典'}`
+    meta.append(dictName, pool)
+    const actions = document.createElement('div')
+    actions.className = 'mydict-random-actions'
+    const nextBtn = document.createElement('button')
+    nextBtn.type = 'button'
+    nextBtn.className = 'next-btn'
+    nextBtn.textContent = '换一个 →'
+    nextBtn.addEventListener('click', (event) => {
+      event.stopPropagation()
+      random.onNext?.()
+    })
+    actions.appendChild(nextBtn)
+    head.append(meta, actions)
+    randomBlock.appendChild(head)
+    if (random.word) {
+      const wordEl = document.createElement('h2')
+      wordEl.className = 'mydict-random-word'
+      wordEl.textContent = random.word
+      randomBlock.appendChild(wordEl)
+    }
+    container.appendChild(randomBlock)
+  }
+
   for (const group of groups) {
     // 原生 <details>：一个分组可能装着几十个同形词（搜韵），全展开会把用户要找的那个埋掉。
     // 只有第一个「在当前语言下可见」的分组默认展开。
     const details = document.createElement('details')
-    details.className = 'mydict-group'
+    // 随机浏览的正文不要折叠标题条：面板头部已经有词典名与词条大标题（对齐网页版）
+    details.className = random?.active ? 'mydict-group mydict-group-random' : 'mydict-group'
     details.dataset.lang = group.lang
     container.appendChild(details)
 
@@ -545,6 +597,15 @@ export function renderResults(results, container, options) {
         void onlineBlock.load()
       }
       onlineBlock.scrollIntoView({ block: 'nearest' })
+      return
+    }
+    if (randomBlock && value === RANDOM_TAB) {
+      // 首次点进来才去挑一条（已经挑过就直接展示，换词用面板里的「换一个 →」）
+      if (!randomBlock.loaded) {
+        randomBlock.loaded = true
+        random.onNext?.()
+      }
+      randomBlock.scrollIntoView({ block: 'nearest' })
       return
     }
     const first = scopes.find((s) => s.details.style.display !== 'none')

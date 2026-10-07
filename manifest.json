@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MyReader 划词查词",
-  "version": "0.2.11",
+  "version": "0.2.13",
   "description": "划选网页上的词，用自建 MyDict 查释义、看发音、收进生词本。",
   "minimum_chrome_version": "116",
   "permissions": [
